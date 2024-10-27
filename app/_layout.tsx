@@ -1,20 +1,49 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import { useFonts } from "expo-font";
+import { Slot, SplashScreen } from "expo-router";
+import { useEffect, useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { ClerkProvider, ClerkLoaded } from '@clerk/clerk-expo'
+import * as SecureStore from 'expo-secure-store'
+import { GlobalContext } from "@/libs/context";
 
-import { useColorScheme } from '@/hooks/useColorScheme';
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!
+
+if (!publishableKey) {
+  throw new Error(
+    'Missing Publishable Key. Please set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in your .env',
+  )
+}
+
+const tokenCache = {
+  async getToken(key: string) {
+    try {
+      const item = await SecureStore.getItemAsync(key)
+      return item
+    } catch (error) {
+      await SecureStore.deleteItemAsync(key)
+      return null
+    }
+  },
+  async saveToken(key: string, value: string) {
+    try {
+      return SecureStore.setItemAsync(key, value)
+    } catch (err) {
+      return
+    }
+  },
+}
+
+interface TLocalModel {
+  userInfo: any;
+}
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+    "Poppins": require("../assets/fonts/Poppins-Regular.ttf"),
+    "Poppins-Bold": require("../assets/fonts/Poppins-Bold.ttf"),
+  }),
+    [localModel, setLocalModel] = useState<TLocalModel | {}>({});
 
   useEffect(() => {
     if (loaded) {
@@ -22,16 +51,16 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  if (!loaded) {
-    return null;
-  }
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-    </ThemeProvider>
+    <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
+      <ClerkLoaded>
+        <GlobalContext.Provider value={{ setLocalModel, localModel }}>
+          <SafeAreaView style={{ display: "flex", flex: 1 }}>
+            <Slot />
+          </SafeAreaView>
+        </GlobalContext.Provider>
+      </ClerkLoaded>
+    </ClerkProvider>
+
   );
 }
